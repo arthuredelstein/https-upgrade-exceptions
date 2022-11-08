@@ -1,0 +1,23 @@
+{
+  "name": "https-upgrade-exceptions",
+  "version": "0.0.1",
+  "description": "finding broken https sites",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arthuredelstein/https-upgrade-exceptions.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/arthuredelstein/https-upgrade-exceptions/issues"
+  },
+  "homepage": "https://github.com/arthuredelstein/https-upgrade-exceptions#readme",
+  "dependencies": {
+    "puppeteer-core": "^19.2.2"
+  }
+}
