@@ -26,7 +26,8 @@ const getResponses = async (browser, url) => {
     responses.push(responseToJson(interceptedResponse));
   });
   try {
-    await page.goto(url, { waitUntil: 'networkidle2'} );
+    await page.goto(url, {
+      waitUntil: 'networkidle2' });
   } catch (e) {
     await page.close();
     return { responses, error: e };
@@ -85,20 +86,24 @@ const asyncPooledProcessor = async function* (asyncIterator, poolSize, asyncFn) 
 };
 
 const main = async () => {
-  const { _: _args, concurrency, name } = minimist(process.argv.slice(2));
+  const { _: _args, concurrency, dryrun, name } = minimist(process.argv.slice(2));
   const poolSize = concurrency ? parseInt(concurrency) : 100;
   const t0 = Date.now();
   const browser = await puppeteer.launch({
     headless: true
   });
   const domains = topDomainIterator();
-  const db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' })
+  if (!dryrun) {
+    const db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' })
+  }
   console.log("ready");
   const results = asyncPooledProcessor(domains, poolSize, async ({number, domain}) => {
     console.log("domainTest:", domain);
     const result = await domainTest(browser, domain);
     console.log("domainTest:", domain, "finished");
-    await db.put(domain, result);
+    if (!dryrun) {
+      await db.put(domain, result);
+    }
     return {number, domain, result};
   });
   let count = 0;
@@ -108,7 +113,9 @@ const main = async () => {
     console.log(elapsed, count, result.number, result.domain, result.result.secure.responses.length, result.result.insecure.responses.length, result.result["error"] === undefined);
   }
 //    results.map(({number, domain, result}) => console.log(number, domain, result.insecure.responses.length, result.secure.responses.length));
-  await db.close();
+  if (!dryrun) {
+    await db.close();
+  }
   await browser.close();
   const t1 = Date.now();
   console.log("Finished. Elapsed time:", t1 - t0);
