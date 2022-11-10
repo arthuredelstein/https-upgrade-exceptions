@@ -1,10 +1,15 @@
 import { Level } from 'level';
 import minimist from 'minimist';
 
-const countStatusErrors = (responses) => {
-  const statusCodes = responses.map(x => x.status);
+const countErrors = (data) => {
+  const statusCodes = data.responses.map(x => x.status);
   const errorCodes = statusCodes.filter(c => (c >= 400))
+  //const browserError = data.error ? 1 : 0;
   return errorCodes.length;
+};
+
+const isTimeout = (data) => {
+  return data.error && data.error.name === "TimeoutError";
 };
 
 const main = async () => {
@@ -13,10 +18,12 @@ const main = async () => {
   const db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' })
   try {
     for await (const [key, value] of db.iterator()) {
-      const insecureErrorCount = countStatusErrors(value.insecure.responses);
-      const secureErrorCount = countStatusErrors(value.secure.responses);
-      if (insecureErrorCount < secureErrorCount) {
-        console.log(key, insecureErrorCount, secureErrorCount);
+      const insecureErrorCount = countErrors(value.insecure);
+      const secureErrorCount = countErrors(value.secure);
+      if (insecureErrorCount < secureErrorCount && value.insecure.responses.length > 0) {
+        if (!isTimeout(value.insecure)) {
+          console.log(key, insecureErrorCount, secureErrorCount, JSON.stringify(value, null, "  "));
+        }
       }
     }
   } catch (err) {
