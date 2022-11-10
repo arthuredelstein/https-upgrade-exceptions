@@ -28,8 +28,10 @@ const getResponses = async (browser, url) => {
   try {
     await page.goto(url, { waitUntil: 'networkidle2'} );
   } catch (e) {
+    await page.close();
     return { responses, error: e };
   }
+  await page.close();
   return { responses };
 };
 
