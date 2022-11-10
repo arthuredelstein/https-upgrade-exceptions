@@ -18,6 +18,11 @@
   },
   "homepage": "https://github.com/arthuredelstein/https-upgrade-exceptions#readme",
   "dependencies": {
+    "iter-ops": "^2.2.3",
+    "level": "^8.0.0",
+    "lodash": "^4.17.21",
+    "minimist": "^1.2.7",
+    "puppeteer": "^19.2.2",
     "puppeteer-core": "^19.2.2"
   }
 }
