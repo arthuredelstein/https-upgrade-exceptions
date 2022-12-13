@@ -3,9 +3,12 @@ import puppeteer from 'puppeteer';
 import * as readline from 'readline';
 import { Level } from 'level';
 import minimist from 'minimist';
-import { pipeAsync, take } from 'iter-ops';
-
+//import { pipeAsync, take } from 'iter-ops';
 const sleep = (t) => new Promise(resolve => setTimeout(resolve, t));
+
+let browser = null;
+let db = null;
+let gDryRun = false;
 
 const callsToJson = (object, callNames) => {
   const result = {};
@@ -18,7 +21,7 @@ const callsToJson = (object, callNames) => {
 const responseToJson = (responseObject) =>
   callsToJson(responseObject, ['status', 'statusText', 'url']);
 
-const getResponses = async (browser, url) => {
+const getResponses = async (url) => {
   const responses = [];
   const page = await browser.newPage();
   page.setDefaultNavigationTimeout(60000);
@@ -36,10 +39,10 @@ const getResponses = async (browser, url) => {
   return { responses };
 };
 
-const domainTest = async (browser, domain) => {
+const domainTest = async (domain) => {
   const [insecure, secure] = await Promise.all([
-    getResponses(browser, `http://${domain}`),
-    getResponses(browser, `https://${domain}`)
+    getResponses(`http://${domain}`),
+    getResponses(`https://${domain}`)
   ]);
   return { insecure, secure };
 };
@@ -57,7 +60,20 @@ const topDomainIterator = async function* () {
   }
 };
 
-const asyncPooledProcessor = async function* (asyncIterator, poolSize, asyncFn) {
+
+const take = async function* (asyncIterator, n) {
+  let i = 0;
+  for (let i = 0; i < n; ++i) {
+    const item = await asyncIterator.next();
+    if (!item.done) {
+      yield item.value;
+    } else {
+      break;
+    }
+  }
+};
+
+const asyncPooledProcessor = async function* (asyncIterator, asyncFn, poolSize) {
   const pool = new Set();
   const poolTracker = new Map();
   const getNextResult = async () => {
@@ -66,7 +82,7 @@ const asyncPooledProcessor = async function* (asyncIterator, poolSize, asyncFn) 
     poolTracker.delete(i);
     pool.delete(p);
     return result;
-  }
+  };
   let index = 0;
   const queueItem = (item) => {
     ++index;
@@ -85,40 +101,44 @@ const asyncPooledProcessor = async function* (asyncIterator, poolSize, asyncFn) 
   }
 };
 
-const main = async () => {
-  const { _: _args, concurrency, dryrun, name } = minimist(process.argv.slice(2));
-  const poolSize = concurrency ? parseInt(concurrency) : 100;
-  const t0 = Date.now();
-  const browser = await puppeteer.launch({
-    headless: true
-  });
-  const domains = topDomainIterator();
-  if (!dryrun) {
-    const db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' })
+const runDomainTestAndSave = async (domain) => {
+  console.log("domainTest:", domain);
+  const result = await domainTest(domain);
+  console.log("domainTest:", domain, "finished");
+  if (!gDryRun) {
+    console.log("put", domain);
+    await db.put(domain, result);
   }
-  console.log("ready");
-  const results = asyncPooledProcessor(domains, poolSize, async ({number, domain}) => {
-    console.log("domainTest:", domain);
-    const result = await domainTest(browser, domain);
-    console.log("domainTest:", domain, "finished");
-    if (!dryrun) {
-      await db.put(domain, result);
-    }
-    return {number, domain, result};
-  });
-  let count = 0;
-  for await (const result of results) {
-    ++count;
-    const elapsed = (Date.now() - t0)/1000;
-    console.log(elapsed, count, result.number, result.domain, result.result.secure.responses.length, result.result.insecure.responses.length, result.result["error"] === undefined);
-  }
-//    results.map(({number, domain, result}) => console.log(number, domain, result.insecure.responses.length, result.secure.responses.length));
-  if (!dryrun) {
-    await db.close();
-  }
-  await browser.close();
-  const t1 = Date.now();
-  console.log("Finished. Elapsed time:", t1 - t0);
+  return result;
 };
 
-main();
+
+const run = async ({dryrun, name, poolSize, headless, batchSize}) => {
+  db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' })
+  const poolSize = poolSize ? parseInt(poolSize) : 32;
+  const batchSize = batchSize ? parseInte(batchSize): 10000;
+  const t0 = Date.now();
+  const domains = topDomainIterator();
+  while (true) {
+    console.log("new browser");
+    browser = await puppeteer.launch({headless: (headless !== false)});
+    const domainBatch = take(domains, batchSize);
+    const results = asyncPooledProcessor(
+      domainBatch, ({domain}) =>
+      runDomainTestAndSave(domain), poolSize);
+    for await (const result of results) {
+      const elapsed = (Date.now() - t0)/1000;
+//      console.log(result);
+    }
+    await browser.close();
+  }
+  const t1 = Date.now();
+  console.log("Finished. Elapsed time:", t1 - t0);
+  await db.close();
+};
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  // module was not imported but called directly
+  await run(minimist(process.argv.slice(2)));
+}
+

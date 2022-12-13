@@ -12,17 +12,25 @@ const isTimeout = (data) => {
   return data.error && data.error.name === "TimeoutError";
 };
 
-const main = async () => {
-  const { _: _args, concurrency, name } = minimist(process.argv.slice(2));
+const countKeys = async (keys) => {
+  let n = 0;
+  for await (const key of keys) {
+    ++n;
+  }
+  return n;
+};
+
+const run = async ({concurrency, name}) => {
   const t0 = Date.now();
   const db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' })
+  console.log(await countKeys(db.keys()));
   try {
     for await (const [key, value] of db.iterator()) {
       const insecureErrorCount = countErrors(value.insecure);
       const secureErrorCount = countErrors(value.secure);
       if (insecureErrorCount < secureErrorCount && value.insecure.responses.length > 0) {
         if (!isTimeout(value.insecure)) {
-          console.log(key, insecureErrorCount, secureErrorCount, JSON.stringify(value, null, "  "));
+          console.log(key, insecureErrorCount, secureErrorCount);
         }
       }
     }
@@ -32,4 +40,7 @@ const main = async () => {
   db.close();
 };
 
-await main();
+if (require.main === module) {
+  await run(minimist(process.argv.slice(2)));
+}
+
