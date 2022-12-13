@@ -115,8 +115,8 @@ const runDomainTestAndSave = async (domain) => {
 
 const run = async ({dryrun, name, poolSize, headless, batchSize}) => {
   db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' })
-  const poolSize = poolSize ? parseInt(poolSize) : 32;
-  const batchSize = batchSize ? parseInte(batchSize): 10000;
+  poolSize = poolSize ? parseInt(poolSize) : 32;
+  batchSize = batchSize ? parseInte(batchSize): 10000;
   const t0 = Date.now();
   const domains = topDomainIterator();
   while (true) {
