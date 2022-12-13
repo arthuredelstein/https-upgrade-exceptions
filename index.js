@@ -101,12 +101,14 @@ const asyncPooledProcessor = async function* (asyncIterator, asyncFn, poolSize) 
   }
 };
 
+let domainCount = 0;
+
 const runDomainTestAndSave = async (domain) => {
-  console.log("domainTest:", domain);
   const result = await domainTest(domain);
-  console.log("domainTest:", domain, "finished");
+  ++domainCount; 
+  console.log(`domainTest ${domainCount}: ${domain}`);
   if (!gDryRun) {
-    console.log("put", domain);
+    //console.log("put", domain);
     await db.put(domain, result);
   }
   return result;
