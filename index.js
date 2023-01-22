@@ -30,7 +30,7 @@ const getResponses = async (url) => {
   });
   try {
     await page.goto(url, {
-      waitUntil: 'networkidle0'
+      waitUntil: 'load'
     });
   } catch (e) {
     await page.close();
@@ -118,7 +118,7 @@ const runDomainTestAndSave = async (domain) => {
 const run = async ({ dryrun, name, poolSize, headless, batchSize }) => {
   db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' });
   poolSize = poolSize ? parseInt(poolSize) : 32;
-  batchSize = batchSize ? parseInte(batchSize) : 10000;
+  batchSize = batchSize ? parseInt(batchSize) : 10000;
   const t0 = Date.now();
   const domains = topDomainIterator();
   while (true) {
