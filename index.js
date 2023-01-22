@@ -37,7 +37,7 @@ const getResponses = async (url) => {
     return { responses, error: e };
   }
   await page.close();
-  return { responses, final_url: p.url() };
+  return { responses, final_url: page.url() };
 };
 
 const domainTest = async (domain) => {
@@ -106,7 +106,7 @@ let domainCount = 0;
 
 const runDomainTestAndSave = async (domain) => {
   const result = await domainTest(domain);
-  ++domainCount; 
+  ++domainCount;
   console.log(`domainTest ${domainCount}: ${domain}`);
   if (!gDryRun) {
     //console.log("put", domain);
