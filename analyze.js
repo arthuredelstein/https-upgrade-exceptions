@@ -32,7 +32,7 @@ const run = async ({ name }) => {
     for await (const [key, value] of db.iterator()) {
       const insecureErrorCount = countErrors(value.insecure);
       const secureErrorCount = countErrors(value.secure);
-      if (insecureErrorCount < secureErrorCount && value.insecure.responses.length > 0) {
+      if (value.insecure.final_url !== value.secure.final_url) {
         if (!isTimeout(value.insecure)) {
           ++n;
           console.log(key, value.insecure.responses.length, value.secure.responses.length, insecureErrorCount, secureErrorCount,

@@ -24,17 +24,17 @@ const responseToJson = (responseObject) =>
 const getResponses = async (url) => {
   const responses = [];
   const page = await browser.newPage();
-  page.setDefaultNavigationTimeout(60000);
+  page.setDefaultNavigationTimeout(20000);
   page.on('response', interceptedResponse => {
     responses.push(responseToJson(interceptedResponse));
   });
   try {
     await page.goto(url, {
-      waitUntil: 'networkidle2'
+      waitUntil: 'networkidle0'
     });
   } catch (e) {
     await page.close();
-    return { responses, error: e };
+    return { responses, final_url: page.url(), error: e };
   }
   await page.close();
   return { responses, final_url: page.url() };
