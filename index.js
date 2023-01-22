@@ -30,13 +30,14 @@ const getResponses = async (url) => {
   });
   try {
     await page.goto(url, {
-      waitUntil: 'networkidle2' });
+      waitUntil: 'networkidle2'
+    });
   } catch (e) {
     await page.close();
     return { responses, error: e };
   }
   await page.close();
-  return { responses };
+  return { responses, final_url: p.url() };
 };
 
 const domainTest = async (domain) => {
@@ -112,23 +113,22 @@ const runDomainTestAndSave = async (domain) => {
   return result;
 };
 
-
-const run = async ({dryrun, name, poolSize, headless, batchSize}) => {
-  db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' })
+const run = async ({ dryrun, name, poolSize, headless, batchSize }) => {
+  db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' });
   poolSize = poolSize ? parseInt(poolSize) : 32;
-  batchSize = batchSize ? parseInte(batchSize): 10000;
+  batchSize = batchSize ? parseInte(batchSize) : 10000;
   const t0 = Date.now();
   const domains = topDomainIterator();
   while (true) {
     console.log("new browser");
-    browser = await puppeteer.launch({headless: (headless !== false)});
+    browser = await puppeteer.launch({ headless: (headless !== false) });
     const domainBatch = take(domains, batchSize);
     const results = asyncPooledProcessor(
-      domainBatch, ({domain}) =>
+      domainBatch, ({ domain }) =>
       runDomainTestAndSave(domain), poolSize);
     for await (const result of results) {
-      const elapsed = (Date.now() - t0)/1000;
-//      console.log(result);
+      const elapsed = (Date.now() - t0) / 1000;
+      //      console.log(result);
     }
     await browser.close();
   }
