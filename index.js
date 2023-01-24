@@ -3,10 +3,10 @@ import puppeteer from 'puppeteer';
 import * as readline from 'readline';
 import { Level } from 'level';
 import minimist from 'minimist';
+import crypto from 'crypto';
 //import { pipeAsync, take } from 'iter-ops';
 const sleep = (t) => new Promise(resolve => setTimeout(resolve, t));
 
-let browser = null;
 let db = null;
 let gDryRun = false;
 
@@ -21,29 +21,37 @@ const callsToJson = (object, callNames) => {
 const responseToJson = (responseObject) =>
   callsToJson(responseObject, ['status', 'statusText', 'url']);
 
-const getResponses = async (url) => {
+const getScreenshotHash = async (page) => {
+  const image = await p.screenshot({type:"png"});
+  const hash = crypto.createHash('sha256').update(image).digest('hex');
+  return hash.substring(0,16);
+};
+
+const getResponses = async (browser, url) => {
   const responses = [];
   const page = await browser.newPage();
   page.setDefaultNavigationTimeout(20000);
   page.on('response', interceptedResponse => {
     responses.push(responseToJson(interceptedResponse));
   });
+  let err = null;
+  let img_hash = null;
   try {
-    await page.goto(url, {
-      waitUntil: 'load'
-    });
+      await Promise.all(
+	  [await page.goto(url, { waitUntil: 'load' }),
+           await sleep(5000)]);
+    img_hash = await getScreenshotHash(p);
   } catch (e) {
-    await page.close();
-    return { responses, final_url: page.url(), error: e };
+    err = e;
   }
   await page.close();
-  return { responses, final_url: page.url() };
+  return { responses, final_url: page.url(), error: err, img_hash };
 };
 
-const domainTest = async (domain) => {
+const domainTest = async (browser, domain) => {
   const [insecure, secure] = await Promise.all([
-    getResponses(`http://${domain}`),
-    getResponses(`https://${domain}`)
+    getResponses(browser, `http://${domain}`),
+    getResponses(browser, `https://${domain}`)
   ]);
   return { insecure, secure };
 };
@@ -74,65 +82,67 @@ const take = async function* (asyncIterator, n) {
   }
 };
 
-const asyncPooledProcessor = async function* (asyncIterator, asyncFn, poolSize) {
-  const pool = new Set();
-  const poolTracker = new Map();
-  const getNextResult = async () => {
-    const [i, result] = await Promise.race(pool);
-    const p = poolTracker.get(i);
-    poolTracker.delete(i);
-    pool.delete(p);
-    return result;
-  };
-  let index = 0;
-  const queueItem = (item) => {
-    ++index;
-    const promise = (async () => [index, await asyncFn(item)])();
-    pool.add(promise);
-    poolTracker.set(index, promise);
-  };
-  for await (const item of asyncIterator) {
-    queueItem(item);
-    if (pool.size === poolSize) {
-      yield await getNextResult();
-    }
-  }
-  while (pool.size > 0) {
-    yield await getNextResult();
-  }
-};
-
 let domainCount = 0;
 
-const runDomainTestAndSave = async (domain) => {
-  const result = await domainTest(domain);
-  ++domainCount;
-  console.log(`domainTest ${domainCount}: ${domain}`);
-  if (!gDryRun) {
-    //console.log("put", domain);
-    await db.put(domain, result);
+const dbHas = async (key) => {
+  try {
+    await db.get(key);
+  } catch (e) {
+    if (e.notFound === true) {
+      return false;
+    }
+    throw e;
   }
-  return result;
+  return true;
 };
 
+const runDomainTestAndSave = async (browser, domain) => {
+  if (await dbHas(domain)) {
+    // skip
+    return;
+  }
+  const result = await domainTest(browser, domain);
+  ++domainCount;
+  if (!gDryRun) {
+    await db.put(domain, result);
+  }
+  return domain;
+};
+
+const createBrowser = (headless) => puppeteer.launch(
+  { headless: (headless !== false) });
+
 const run = async ({ dryrun, name, poolSize, headless, batchSize }) => {
+  gDryRun = dryrun;
   db = new Level(`${name ?? "results"}.db`, { valueEncoding: 'json' });
-  poolSize = poolSize ? parseInt(poolSize) : 32;
-  batchSize = batchSize ? parseInt(batchSize) : 10000;
+  poolSize = poolSize ? parseInt(poolSize) : 20;
+  batchSize = batchSize ? parseInt(batchSize) : 500;
   const t0 = Date.now();
   const domains = topDomainIterator();
-  while (true) {
-    console.log("new browser");
-    browser = await puppeteer.launch({ headless: (headless !== false) });
-    const domainBatch = take(domains, batchSize);
-    const results = asyncPooledProcessor(
-      domainBatch, ({ domain }) =>
-      runDomainTestAndSave(domain), poolSize);
-    for await (const result of results) {
-      const elapsed = (Date.now() - t0) / 1000;
-      //      console.log(result);
+  let count = 0;
+  let currentTests = new Map();
+  let browser;
+  let batchStart = t0;
+  for await (const {number, domain} of domains) {
+    if (count % batchSize == 0) {
+      await Promise.all(currentTests.values());
+      currentTests = new Map();
+      if (browser) {
+        await browser.close();
+      }
+      const now = Date.now();
+      const delta = now - batchStart;
+      console.log(`batch elapsed: ${delta}`);
+      batchStart = now;
+      browser = await createBrowser(headless);
     }
-    await browser.close();
+    if (currentTests.size === poolSize) {
+      const domain = await Promise.race(currentTests.values());
+      currentTests.delete(domain);
+    }
+    console.log(count, domain);
+    currentTests.set(domain, runDomainTestAndSave(browser, domain));
+    ++count;
   }
   const t1 = Date.now();
   console.log("Finished. Elapsed time:", t1 - t0);
