@@ -4,6 +4,7 @@ import * as readline from 'readline';
 import { Level } from 'level';
 import minimist from 'minimist';
 import crypto from 'crypto';
+import { create } from 'lodash';
 //import { pipeAsync, take } from 'iter-ops';
 const sleep = (t) => new Promise(resolve => setTimeout(resolve, t));
 
@@ -22,12 +23,12 @@ const responseToJson = (responseObject) =>
   callsToJson(responseObject, ['status', 'statusText', 'url']);
 
 const getScreenshotHash = async (page) => {
-  const image = await p.screenshot({type:"png"});
+  const image = await p.screenshot({ type: "png" });
   const hash = crypto.createHash('sha256').update(image).digest('hex');
-  return hash.substring(0,16);
+  return hash.substring(0, 16);
 };
 
-const getResponses = async (browser, url) => {
+export const getResponses = async (browser, url) => {
   const responses = [];
   const page = await browser.newPage();
   page.setDefaultNavigationTimeout(20000);
@@ -37,10 +38,10 @@ const getResponses = async (browser, url) => {
   let err = null;
   let img_hash = null;
   try {
-      await Promise.all(
-	  [await page.goto(url, { waitUntil: 'load' }),
-           await sleep(5000)]);
-    img_hash = await getScreenshotHash(p);
+    await Promise.all(
+      [await page.goto(url, { waitUntil: 'load' }),
+      await sleep(5000)]);
+    img_hash = await getScreenshotHash(page);
   } catch (e) {
     err = e;
   }
@@ -109,7 +110,7 @@ const runDomainTestAndSave = async (browser, domain) => {
   return domain;
 };
 
-const createBrowser = (headless) => puppeteer.launch(
+export const createBrowser = (headless) => puppeteer.launch(
   { headless: (headless !== false) });
 
 const run = async ({ dryrun, name, poolSize, headless, batchSize }) => {
@@ -123,7 +124,7 @@ const run = async ({ dryrun, name, poolSize, headless, batchSize }) => {
   let currentTests = new Map();
   let browser;
   let batchStart = t0;
-  for await (const {number, domain} of domains) {
+  for await (const { number, domain } of domains) {
     if (count % batchSize == 0) {
       await Promise.all(currentTests.values());
       currentTests = new Map();
