@@ -49,7 +49,7 @@ export const getResponses = async (browser, url) => {
   return { responses, final_url: page.url(), error: err, img_hash };
 };
 
-const domainTest = async (browser, domain) => {
+export const domainTest = async (browser, domain) => {
   const [insecure, secure] = await Promise.all([
     getResponses(browser, `http://${domain}`),
     getResponses(browser, `https://${domain}`)

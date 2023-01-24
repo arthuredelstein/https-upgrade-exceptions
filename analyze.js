@@ -2,7 +2,7 @@ import { Level } from 'level';
 import minimist from 'minimist';
 import url from 'url';
 import fs from 'fs';
-import { getResponses, createBrowser } from './index.js';
+import { domainTest, getResponses, createBrowser } from './index.js';
 
 const countErrors = (data) => {
   const statusCodes = data.responses.map(x => x.status);
@@ -46,7 +46,7 @@ const urlEssence = (urlString) => {
     .replace(/\/en\/$/, "/")
     .replace(/index\.html$/)
     .replace(/index\.htm$/)
-    .replace(/\/$/, "");
+    .replace(/\/+$/, "");
   return newURL;
 };
 
@@ -101,18 +101,23 @@ const run = async ({ name }) => {
   const falsePositives = getFalsePositives();
   const knownExceptions = getKnownExceptions();
   try {
+    const browser = await createBrowser();
     for await (const [key, value] of db.iterator()) {
       const insecureErrorCount = countErrors(value.insecure);
       const secureErrorCount = countErrors(value.secure);
       if (suspiciousHttps(value) && !falsePositives.has(key) && !knownExceptions.has(key)) {
         if (!isTimeout(value.insecure)) {
-          ++n;
-          console.log(key, value.insecure.final_url, value.secure.final_url, value.insecure.responses.length, value.secure.responses.length, insecureErrorCount, secureErrorCount,
-            //JSON.stringify(value.insecure.responses.map(x => x.status)),
-            //JSON.stringify(value.secure.responses.map(x => x.status)),
-            homepageFailed(value.insecure), homepageFailed(value.secure),
-            value.insecure.img_hash, value.secure.img_hash
-          );
+          const secondTest = await domainTest(browser, key);
+          //console.log(key, secondTest);
+          if (secondTest.secure.img_hash !== secondTest.insecure.img_hash) {
+            ++n;
+            console.log(key, value.insecure.final_url, value.secure.final_url, value.insecure.responses.length, value.secure.responses.length, insecureErrorCount, secureErrorCount,
+              //JSON.stringify(value.insecure.responses.map(x => x.status)),
+              //JSON.stringify(value.secure.responses.map(x => x.status)),
+              homepageFailed(value.insecure), homepageFailed(value.secure),
+              secondTest.insecure.img_hash, secondTest.secure.img_hash
+            );
+          }
         }
       }
     }
