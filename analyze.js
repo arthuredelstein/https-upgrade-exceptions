@@ -61,36 +61,44 @@ const homepageFailed = (test) => {
   return false;
 };
 
-const suspiciousHttps = (value) => {
+const checkUpgrade = (value) => {
   if (value.secure.final_url === "about:blank" ||
     new URL(value.secure.final_url).protocol === "chrome-error:") {
     // We have an error loading HTTPS, so we will fall back correctly.
-    return false;
+    return "ok";
   }
   if (value.insecure.final_url === "about:blank" ||
     new URL(value.insecure.final_url).protocol === "chrome-error:") {
     // HTTP is broken, but it shouldn't matter because we load
     // HTTPS first. If HTTPS fails and we fall back to this broken HTTP, then
     // the whole site is simply broken.
-    return false;
+    return "ok";
   }
   if (homepageFailed(value.secure) && !homepageFailed(value.insecure)) {
     // We're getting an error code in the secure site, but not the same
     // error code on the insecure site.
-    return true;
+    return "broken";
   }
   if (value.secure.responses.length > 10 &&
     value.insecure.responses.length > 10 &&
     value.secure.responses.length + 1 === value.insecure.responses.length &&
     value.insecure.responses[0].status >= 300 &&
     value.insecure.responses[0].status < 400) {
-    return false;
+    return "ok";
   }
   if (urlEssence(value.insecure.final_url) !== urlEssence(value.secure.final_url)) {
-    // The destination sites don't match. That looks bad!
-    return true;
+    // The destination sites don't match. That looks bad but needs human review.
+    return "suspicious";
   }
-  return false;
+  return "ok";
+};
+
+const count1 = async (db) => {
+  let n = 0;
+  for await (const [key, val] of db.iterator()) {
+    ++n;
+  }
+  return n;
 };
 
 const run = async ({ name }) => {
@@ -105,8 +113,9 @@ const run = async ({ name }) => {
     for await (const [key, value] of db.iterator()) {
       const insecureErrorCount = countErrors(value.insecure);
       const secureErrorCount = countErrors(value.secure);
-      if (suspiciousHttps(value) && !falsePositives.has(key) && !knownExceptions.has(key)) {
+      if (!falsePositives.has(key) && !knownExceptions.has(key)) {
         if (!isTimeout(value.insecure)) {
+          if (suspiciousHttps(value)) && 
           const secondTest = await domainTest(browser, key);
           //console.log(key, secondTest);
           if (secondTest.secure.img_hash !== secondTest.insecure.img_hash) {
