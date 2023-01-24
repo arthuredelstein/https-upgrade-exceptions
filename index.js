@@ -23,7 +23,7 @@ const responseToJson = (responseObject) =>
   callsToJson(responseObject, ['status', 'statusText', 'url']);
 
 const getScreenshotHash = async (page) => {
-  const image = await p.screenshot({ type: "png" });
+  const image = await page.screenshot({ type: "png" });
   const hash = crypto.createHash('sha256').update(image).digest('hex');
   return hash.substring(0, 16);
 };
