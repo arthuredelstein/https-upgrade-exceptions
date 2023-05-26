@@ -23,6 +23,7 @@
     "lodash": "^4.17.21",
     "minimist": "^1.2.7",
     "puppeteer": "^19.2.2",
+    "puppeteer-cluster": "^0.23.0",
     "puppeteer-core": "^19.2.2"
   }
 }
