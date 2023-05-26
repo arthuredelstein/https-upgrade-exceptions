@@ -2,6 +2,7 @@ import { Cluster } from 'puppeteer-cluster';
 import { Level } from 'level';
 import crypto from 'crypto';
 import { getDomains } from './tranco';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 const sleep = (t) => new Promise(resolve => setTimeout(resolve, t));
 
@@ -47,14 +48,15 @@ const runTest = async ({ page, data: { domain, db } }) => {
     const insecure = await fetchResponses({ page, url: `http://${domain}` });
     const secure = await fetchResponses({ page, url: `https://${domain}` });
     const result = { secure, insecure };
-    await db.put(domain, result);
+    writeFile(`results_files/${domain}`, JSON.stringify(result));
   } catch (e) {
     console.log(e);
   }
 };
 
 const runCluster = async (domains) => {
-  const db = new Level("results.db", { valueEncoding: 'json' });
+  mkdir("results_files");
+
   const cluster = await Cluster.launch({
     concurrency: Cluster.CONCURRENCY_CONTEXT,
     maxConcurrency: 32,
@@ -62,14 +64,14 @@ const runCluster = async (domains) => {
   });
   await cluster.task(runTest);
   for (const domain of domains) {
-    cluster.queue({db, domain, url: domain});
+    cluster.queue({domain, url: domain});
   }
   await cluster.idle();
   await cluster.close();
-  await db.close();
 }
 
 const runCrawl = async (size) => {
   const { domains } = await getDomains(size);
   await runCluster(domains);
 }
+
